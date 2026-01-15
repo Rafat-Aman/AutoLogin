@@ -1,29 +1,30 @@
 // TOTP Implementation using Web Crypto API
 // RFC 6238 (TOTP) and RFC 4226 (HOTP)
 
-const TOTP = {
+// Attach to window to ensure visibility in other content scripts
+window.TOTP = {
   // RFC 4648 Base32 alphabet
   base32Chars: "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567",
 
   // Decode Base32 string to Uint8Array
-  base32ToBuf: function(str) {
+  base32ToBuf: function (str) {
     str = str.toUpperCase().replace(/=+$/, "");
     let binary = "";
     for (let i = 0; i < str.length; i++) {
-        const val = this.base32Chars.indexOf(str[i]);
-        if (val === -1) throw new Error("Invalid Base32 character");
-        binary += val.toString(2).padStart(5, "0");
+      const val = this.base32Chars.indexOf(str[i]);
+      if (val === -1) throw new Error("Invalid Base32 character");
+      binary += val.toString(2).padStart(5, "0");
     }
     const len = Math.floor(binary.length / 8);
     const buf = new Uint8Array(len);
     for (let i = 0; i < len; i++) {
-        buf[i] = parseInt(binary.slice(i * 8, (i + 1) * 8), 2);
+      buf[i] = parseInt(binary.slice(i * 8, (i + 1) * 8), 2);
     }
     return buf;
   },
 
   // Convert number to 8-byte big-endian Uint8Array
-  intToBuf: function(num) {
+  intToBuf: function (num) {
     const buf = new ArrayBuffer(8);
     const view = new DataView(buf);
     // JS numbers are 64-bit float. We care about the lower 64 bits for counter.
@@ -34,7 +35,7 @@ const TOTP = {
   },
 
   // Generate HMAC-SHA1
-  hmacSha1: async function(key, data) {
+  hmacSha1: async function (key, data) {
     const cryptoKey = await crypto.subtle.importKey(
       "raw",
       key,
@@ -47,7 +48,7 @@ const TOTP = {
   },
 
   // Generate TOTP code
-  generate: async function(secretBase32) {
+  generate: async function (secretBase32) {
     try {
       const keyBytes = this.base32ToBuf(secretBase32);
       const epoch = Math.floor(Date.now() / 1000);
@@ -56,7 +57,7 @@ const TOTP = {
       const counterBytes = this.intToBuf(counter);
 
       const hmac = await this.hmacSha1(keyBytes, counterBytes);
-      
+
       // Dynamic Truncation
       const offset = hmac[hmac.length - 1] & 0xf;
       const binary =
@@ -64,7 +65,7 @@ const TOTP = {
         ((hmac[offset + 1] & 0xff) << 16) |
         ((hmac[offset + 2] & 0xff) << 8) |
         (hmac[offset + 3] & 0xff);
-        
+
       const otp = binary % 1000000;
       return otp.toString().padStart(6, "0");
     } catch (e) {
@@ -74,8 +75,8 @@ const TOTP = {
   },
 
   // Calculate seconds remaining in current window
-  getRemainingContext: function() {
-      const epoch = Math.floor(Date.now() / 1000);
-      return 30 - (epoch % 30);
+  getRemainingContext: function () {
+    const epoch = Math.floor(Date.now() / 1000);
+    return 30 - (epoch % 30);
   }
 };

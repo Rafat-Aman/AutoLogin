@@ -2,7 +2,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const secretInput = document.getElementById('secret-input');
     const saveBtn = document.getElementById('save-btn');
     const clearBtn = document.getElementById('clear-btn');
-    const autofillBtn = document.getElementById('autofill-btn');
+
+    // New Buttons
+    const startBtn = document.getElementById('start-btn');
+    const stopBtn = document.getElementById('stop-btn');
+
     const otpCodeWith = document.getElementById('otp-code');
     const timerBar = document.getElementById('timer-bar');
     const timerText = document.getElementById('timer-text');
@@ -16,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentSecret = null;
     let timerInterval = null;
 
-    // Load secret from storage
+    // Load setup from storage
     chrome.storage.local.get(['totpSecret', 'userNumber', 'userPassword', 'actionDelay'], (result) => {
         if (result.totpSecret) {
             currentSecret = result.totpSecret;
@@ -35,25 +39,23 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // Input Listeners
     userNumberInput.addEventListener('input', () => {
-        const num = userNumberInput.value.trim();
-        chrome.storage.local.set({ userNumber: num });
+        chrome.storage.local.set({ userNumber: userNumberInput.value.trim() });
     });
 
     passwordInput.addEventListener('input', () => {
-        const pass = passwordInput.value; // Don't trim password
-        chrome.storage.local.set({ userPassword: pass });
+        chrome.storage.local.set({ userPassword: passwordInput.value });
     });
 
     delayInput.addEventListener('input', () => {
-        const delay = delayInput.value;
-        chrome.storage.local.set({ actionDelay: delay });
+        chrome.storage.local.set({ actionDelay: delayInput.value });
     });
 
+    // Button Listeners
     saveBtn.addEventListener('click', () => {
         const secret = secretInput.value.trim().toUpperCase();
         if (!secret) return;
-        // Basic validation could go here
         chrome.storage.local.set({ totpSecret: secret }, () => {
             currentSecret = secret;
             showOtpSection();
@@ -67,136 +69,46 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    autofillBtn.addEventListener('click', async () => {
-        const code = otpCodeWith.innerText;
-        if (code === "------") return;
+    // Start Automation
+    startBtn.addEventListener('click', async () => {
+        // Enable flag
+        chrome.storage.local.set({ automationEnabled: true });
 
-        const userNumber = userNumberInput.value.trim();
-        const password = passwordInput.value;
-        const delay = parseInt(delayInput.value) || 1000;
+        // UI Feedback
+        const originalText = startBtn.innerText;
+        startBtn.innerText = "Started!";
+        setTimeout(() => startBtn.innerText = originalText, 1000);
 
-        // Send message to active tab
+        // Send message to current tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
         if (tab) {
-            try {
-                const response = await chrome.tabs.sendMessage(tab.id, {
-                    action: "autofill",
-                    code: code,
-                    userNumber: userNumber,
-                    password: password,
-                    delay: delay
-                });
-                console.log("Autofill response:", response);
-            } catch (e) {
-                console.log("Could not send message, maybe content script not loaded?", e);
-                // Fallback: Use scripting API if content script failed or we want to ensure it runs
-                chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    func: (code, userNumber, password, delay) => {
-                        const waitBuffer = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-                        function getElementByXPath(path) {
-                            return document.evaluate(path, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-                        }
-
-                        // Helper to fill input
-                        function fillInput(el, value) {
-                            if (!el) return;
-                            el.value = value;
-                            el.dispatchEvent(new Event('input', { bubbles: true }));
-                            el.dispatchEvent(new Event('change', { bubbles: true }));
-                        }
-
-                        // Main execution function
-                        async function execute() {
-                            // 1. Try User Number Fill
-                            if (userNumber) {
-                                const userXPath = '//*[@id="UserName"]';
-                                const userInput = getElementByXPath(userXPath);
-
-                                if (userInput) {
-                                    fillInput(userInput, userNumber);
-
-                                    await waitBuffer(delay);
-
-                                    const nextBtnXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/input[2]';
-                                    const nextBtn = getElementByXPath(nextBtnXPath);
-                                    if (nextBtn) nextBtn.click();
-
-                                    // We need to wait for next inputs. 
-                                    // Simple poll for fallback script
-                                    let attempts = 0;
-                                    const interval = setInterval(() => {
-                                        attempts++;
-                                        if (attempts > 40) clearInterval(interval); // 10-20 seconds max depending on delay? 
-
-                                        // Wait a bit more if needed? setInterval is independent.
-
-                                        const passXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[2]/div[2]/div/input';
-                                        const passInput = getElementByXPath(passXPath);
-                                        if (passInput && password) {
-                                            fillInput(passInput, password);
-                                        }
-
-                                        const specificXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[3]/div[2]/div/input';
-                                        let otpInput = getElementByXPath(specificXPath) || document.getElementById('otp-input') || document.querySelector('input[name="otp"]');
-
-                                        if (otpInput) {
-                                            fillInput(otpInput, code);
-
-                                            // If we filled both (or just OTP if Pass not needed), click submit
-                                            // But user only mentioned OTP and Pass filling.
-                                            // Assume submit button might be next action
-                                            const submitXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/input[3]';
-                                            const btn = getElementByXPath(submitXPath) || document.getElementById('submit-btn');
-
-                                            if (btn) {
-                                                // Optional: wait before clicking submit?
-                                                // Since we are in an interval, we can't await easily without clearing logic.
-                                                // Let's just click.
-                                                btn.click();
-                                            }
-
-                                            clearInterval(interval);
-                                        }
-                                    }, 500);
-                                    return;
-                                }
-                            }
-
-                            // 2. Direct Fill (if User Number box not found / already on step 2)
-                            if (password) {
-                                const passXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[2]/div[2]/div/input';
-                                const passInput = getElementByXPath(passXPath);
-                                fillInput(passInput, password);
-                            }
-
-                            let input = document.getElementById('otp-input') || document.querySelector('input[name="otp"]');
-                            if (!input) {
-                                const specificXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[3]/div[2]/div/input';
-                                input = getElementByXPath(specificXPath);
-                            }
-
-                            if (input) {
-                                fillInput(input, code);
-                                console.log("EduTOTP: Injected code via scripting fallback.");
-
-                                await waitBuffer(delay);
-
-                                const submitXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/input[3]';
-                                const btn = getElementByXPath(submitXPath) || document.getElementById('submit-btn');
-                                if (btn) btn.click();
-                            }
-                        }
-
-                        execute();
-                    },
-                    args: [code, userNumber, password, delay]
-                });
-            }
+            chrome.tabs.sendMessage(tab.id, { action: "start" }).catch((e) => {
+                console.log("Could not send start message (content script may not be ready):", e);
+            });
         }
     });
 
+    // Stop Automation
+    stopBtn.addEventListener('click', async () => {
+        // Disable flag
+        chrome.storage.local.set({ automationEnabled: false });
+
+        // UI Feedback
+        const originalText = stopBtn.innerText;
+        stopBtn.innerText = "Stopped!";
+        setTimeout(() => stopBtn.innerText = originalText, 1000);
+
+        // Send message to current tab
+        const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (tab) {
+            chrome.tabs.sendMessage(tab.id, { action: "stop" }).catch((e) => {
+                console.log("Could not send stop message:", e);
+            });
+        }
+    });
+
+
+    // UI Helpers
     function showSetupSection() {
         setupSection.classList.remove('hidden');
         otpSection.classList.add('hidden');

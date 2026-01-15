@@ -158,9 +158,13 @@
       </div>
       <label for="delay-input">Action Delay (ms)</label>
       <div style="margin-bottom: 8px;">
-        <input type="number" id="delay-input" placeholder="1000" value="1000" style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; box-sizing: border-box;" />
+        <input type="number" id="delay-input" placeholder="1000" value="1000"
+          style="width: 100%; padding: 8px; border: 1px solid #d1d5db; border-radius: 4px; box-sizing: border-box;" />
       </div>
-      <button id="autofill-btn">Autofill</button>
+      <div style="display: flex; gap: 8px;">
+        <button id="start-btn" style="flex: 1;">Start Automation</button>
+        <button id="stop-btn" style="flex: 1; background-color: #ef4444;">Stop</button>
+      </div>
     </div>
     <div style="margin-top: 8px;">
       <button id="clear-btn" class="secondary">Reset Secret</button>

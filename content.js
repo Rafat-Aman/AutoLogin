@@ -93,17 +93,65 @@ async function autoRun() {
             console.error("EduTOTP: Error generating code or filling:", e);
         }
     }
+
+    // 4. Check for Landing Page (Advising Navigation)
+    if (window.location.href.includes("students/landing")) {
+        console.log("EduTOTP: On Landing Page, attempting navigation to Advising...");
+
+        const menuXPath = '//*[@id="sidebar"]/ul/li[4]/a';
+        const menuLink = getElementByXPath(menuXPath);
+
+        if (menuLink) {
+            // Dispatch events to simulate hover just in case it's needed for visibility
+            menuLink.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
+            menuLink.dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));
+
+            // Wait slightly for menu animation if any
+            await wait(delay / 2);
+
+            // Try clicking the parent menu if it's a click-to-open style
+            menuLink.click();
+
+            await wait(delay / 2);
+
+            const advisingXPath = '//*[@id="sidebar"]/ul/li[4]/ul/li/a';
+            const advisingLink = getElementByXPath(advisingXPath);
+
+            if (advisingLink) {
+                console.log(`EduTOTP: Clicking Advising link in ${delay}ms...`);
+                await wait(delay);
+                advisingLink.click();
+            } else {
+                console.log("EduTOTP: Advising link not found (visible?).");
+            }
+        }
+    }
 }
 
-// Run immediately on load
-autoRun();
-
-// Keep the manual listener for debugging or forced overrides
-chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-    if (request.action === "autofill") {
-        autoRun().then(() => {
-            sendResponse({ status: "success", message: "Manual run triggered" });
-        });
-        return true;
+// Global toggle check
+// Global toggle check
+chrome.storage.local.get(['automationEnabled'], (result) => {
+    // Default to TRUE if undefined to match "worked before" behavior
+    if (result.automationEnabled !== false) {
+        console.log("EduTOTP: Automation enabled.");
+        autoRun();
+    } else {
+        console.log("EduTOTP: Automation disabled, standing by.");
     }
+});
+
+// Listener for Popup commands
+chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
+    if (request.action === "start") {
+        console.log("EduTOTP: Received START command.");
+        autoRun();
+        sendResponse({ status: "started" });
+    }
+    else if (request.action === "stop") {
+        console.log("EduTOTP: Received STOP command. Reloading to halt...");
+        // Reloading is the most effective way to kill any pending async waits/clicks
+        window.location.reload();
+        sendResponse({ status: "stopped" });
+    }
+    return true;
 });
