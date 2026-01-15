@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EduTOTP</title>
+  <style>
+    :root {
+      --primary: #4f46e5;
+      --bg: #f9fafb;
+      --card-bg: #ffffff;
+      --text: #1f2937;
+      --text-sub: #6b7280;
+    }
+
+    body {
+      width: 300px;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: var(--bg);
+      margin: 0;
+      padding: 16px;
+      color: var(--text);
+    }
+
+    h1 {
+      font-size: 18px;
+      margin: 0 0 12px 0;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      margin-bottom: 16px;
+    }
+
+    .input-group {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-sub);
+      margin-bottom: 4px;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 8px;
+      border: 1px solid #d1d5db;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-family: monospace;
+    }
+
+    button {
+      width: 100%;
+      padding: 8px;
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: 500;
+      transition: background-color 0.2s;
+    }
+
+    button:hover {
+      background-color: #4338ca;
+    }
+
+    button.secondary {
+      background-color: #e5e7eb;
+      color: #374151;
+    }
+
+    button.secondary:hover {
+      background-color: #d1d5db;
+    }
+
+    .otp-display {
+      text-align: center;
+      margin-top: 8px;
+    }
+
+    .otp-code {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: 4px;
+      color: var(--text);
+      font-family: monospace;
+    }
+
+    .timer {
+      height: 4px;
+      background: #e5e7eb;
+      border-radius: 2px;
+      margin-top: 8px;
+      overflow: hidden;
+    }
+
+    .timer-bar {
+      height: 100%;
+      background: var(--primary);
+      width: 100%;
+      transition: width 1s linear;
+    }
+
+    .timer-text {
+      text-align: center;
+      font-size: 11px;
+      color: var(--text-sub);
+      margin-top: 4px;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>EduTOTP Extension</h1>
+
+  <!-- Setup Section -->
+  <div id="setup-section" class="card">
+    <div class="input-group">
+      <label for="secret-input">Enter TOTP Secret (Base32)</label>
+      <input type="text" id="secret-input" placeholder="JBSWY3DPEHPK3PXP" />
+    </div>
+    <button id="save-btn">Save Secret</button>
+  </div>
+
+  <!-- Display Section -->
+  <div id="otp-section" class="card hidden">
+    <label>Current Code</label>
+    <div class="otp-display">
+      <div class="otp-code" id="otp-code">------</div>
+    </div>
+    <div class="timer">
+      <div class="timer-bar" id="timer-bar"></div>
+    </div>
+    <div class="timer-text" id="timer-text">30s</div>
+
+    <div style="margin-top: 16px;">
+      <label for="user-number-input">User Number (Optional)</label>
+      <div style="margin-bottom: 8px;">
+        <input type="text" id="user-number-input" placeholder="Type User Number" />
+      </div>
+      <label for="password-input">Password (Optional)</label>
+      <div style="margin-bottom: 8px;">
+        <input type="password" id="password-input" placeholder="Type Password" />
+      </div>
+      <button id="autofill-btn">Autofill</button>
+    </div>
+    <div style="margin-top: 8px;">
+      <button id="clear-btn" class="secondary">Reset Secret</button>
+    </div>
+  </div>
+
+  <script src="totp.js"></script>
+  <script src="popup.js"></script>
+</body>
+
+</html>
