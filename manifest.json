@@ -17,6 +17,7 @@
                 "<all_urls>"
             ],
             "js": [
+                "totp.js",
                 "content.js"
             ]
         }

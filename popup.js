@@ -8,6 +8,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const timerText = document.getElementById('timer-text');
     const userNumberInput = document.getElementById('user-number-input');
     const passwordInput = document.getElementById('password-input');
+    const delayInput = document.getElementById('delay-input');
 
     const setupSection = document.getElementById('setup-section');
     const otpSection = document.getElementById('otp-section');
@@ -16,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let timerInterval = null;
 
     // Load secret from storage
-    chrome.storage.local.get(['totpSecret', 'userNumber', 'userPassword'], (result) => {
+    chrome.storage.local.get(['totpSecret', 'userNumber', 'userPassword', 'actionDelay'], (result) => {
         if (result.totpSecret) {
             currentSecret = result.totpSecret;
             showOtpSection();
@@ -29,6 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (result.userPassword) {
             passwordInput.value = result.userPassword;
         }
+        if (result.actionDelay) {
+            delayInput.value = result.actionDelay;
+        }
     });
 
     userNumberInput.addEventListener('input', () => {
@@ -39,6 +43,11 @@ document.addEventListener('DOMContentLoaded', () => {
     passwordInput.addEventListener('input', () => {
         const pass = passwordInput.value; // Don't trim password
         chrome.storage.local.set({ userPassword: pass });
+    });
+
+    delayInput.addEventListener('input', () => {
+        const delay = delayInput.value;
+        chrome.storage.local.set({ actionDelay: delay });
     });
 
     saveBtn.addEventListener('click', () => {
@@ -64,6 +73,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const userNumber = userNumberInput.value.trim();
         const password = passwordInput.value;
+        const delay = parseInt(delayInput.value) || 1000;
 
         // Send message to active tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -73,7 +83,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     action: "autofill",
                     code: code,
                     userNumber: userNumber,
-                    password: password
+                    password: password,
+                    delay: delay
                 });
                 console.log("Autofill response:", response);
             } catch (e) {
@@ -81,7 +92,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Fallback: Use scripting API if content script failed or we want to ensure it runs
                 chrome.scripting.executeScript({
                     target: { tabId: tab.id },
-                    func: (code, userNumber, password) => {
+                    func: (code, userNumber, password, delay) => {
+                        const waitBuffer = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
                         function getElementByXPath(path) {
                             return document.evaluate(path, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
                         }
@@ -94,71 +107,91 @@ document.addEventListener('DOMContentLoaded', () => {
                             el.dispatchEvent(new Event('change', { bubbles: true }));
                         }
 
-                        // 1. Try User Number Fill
-                        if (userNumber) {
-                            const userXPath = '//*[@id="UserName"]';
-                            const userInput = getElementByXPath(userXPath);
+                        // Main execution function
+                        async function execute() {
+                            // 1. Try User Number Fill
+                            if (userNumber) {
+                                const userXPath = '//*[@id="UserName"]';
+                                const userInput = getElementByXPath(userXPath);
 
-                            if (userInput) {
-                                fillInput(userInput, userNumber);
+                                if (userInput) {
+                                    fillInput(userInput, userNumber);
 
-                                const nextBtnXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/input[2]';
-                                const nextBtn = getElementByXPath(nextBtnXPath);
-                                if (nextBtn) nextBtn.click();
+                                    await waitBuffer(delay);
 
-                                // We need to wait for next inputs. 
-                                // Simple poll for fallback script
-                                let attempts = 0;
-                                const interval = setInterval(() => {
-                                    attempts++;
-                                    if (attempts > 20) clearInterval(interval); // 10 seconds max
+                                    const nextBtnXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/input[2]';
+                                    const nextBtn = getElementByXPath(nextBtnXPath);
+                                    if (nextBtn) nextBtn.click();
 
-                                    const passXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[2]/div[2]/div/input';
-                                    const passInput = getElementByXPath(passXPath);
-                                    if (passInput && password) {
-                                        fillInput(passInput, password);
-                                    }
+                                    // We need to wait for next inputs. 
+                                    // Simple poll for fallback script
+                                    let attempts = 0;
+                                    const interval = setInterval(() => {
+                                        attempts++;
+                                        if (attempts > 40) clearInterval(interval); // 10-20 seconds max depending on delay? 
 
-                                    const specificXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[4]/div[2]/div/input';
-                                    let otpInput = getElementByXPath(specificXPath) || document.getElementById('otp-input') || document.querySelector('input[name="otp"]');
+                                        // Wait a bit more if needed? setInterval is independent.
 
-                                    if (otpInput) {
-                                        fillInput(otpInput, code);
+                                        const passXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[2]/div[2]/div/input';
+                                        const passInput = getElementByXPath(passXPath);
+                                        if (passInput && password) {
+                                            fillInput(passInput, password);
+                                        }
 
-                                        // If we filled both (or just OTP if Pass not needed), click submit
-                                        // But user only mentioned OTP and Pass filling.
-                                        // Assume submit button might be next action
-                                        const btn = document.getElementById('submit-btn');
-                                        if (btn) btn.click();
+                                        const specificXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[3]/div[2]/div/input';
+                                        let otpInput = getElementByXPath(specificXPath) || document.getElementById('otp-input') || document.querySelector('input[name="otp"]');
 
-                                        clearInterval(interval);
-                                    }
-                                }, 500);
-                                return;
+                                        if (otpInput) {
+                                            fillInput(otpInput, code);
+
+                                            // If we filled both (or just OTP if Pass not needed), click submit
+                                            // But user only mentioned OTP and Pass filling.
+                                            // Assume submit button might be next action
+                                            const submitXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/input[3]';
+                                            const btn = getElementByXPath(submitXPath) || document.getElementById('submit-btn');
+
+                                            if (btn) {
+                                                // Optional: wait before clicking submit?
+                                                // Since we are in an interval, we can't await easily without clearing logic.
+                                                // Let's just click.
+                                                btn.click();
+                                            }
+
+                                            clearInterval(interval);
+                                        }
+                                    }, 500);
+                                    return;
+                                }
+                            }
+
+                            // 2. Direct Fill (if User Number box not found / already on step 2)
+                            if (password) {
+                                const passXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[2]/div[2]/div/input';
+                                const passInput = getElementByXPath(passXPath);
+                                fillInput(passInput, password);
+                            }
+
+                            let input = document.getElementById('otp-input') || document.querySelector('input[name="otp"]');
+                            if (!input) {
+                                const specificXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[3]/div[2]/div/input';
+                                input = getElementByXPath(specificXPath);
+                            }
+
+                            if (input) {
+                                fillInput(input, code);
+                                console.log("EduTOTP: Injected code via scripting fallback.");
+
+                                await waitBuffer(delay);
+
+                                const submitXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/input[3]';
+                                const btn = getElementByXPath(submitXPath) || document.getElementById('submit-btn');
+                                if (btn) btn.click();
                             }
                         }
 
-                        // 2. Direct Fill (if User Number box not found / already on step 2)
-                        if (password) {
-                            const passXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[2]/div[2]/div/input';
-                            const passInput = getElementByXPath(passXPath);
-                            fillInput(passInput, password);
-                        }
-
-                        let input = document.getElementById('otp-input') || document.querySelector('input[name="otp"]');
-                        if (!input) {
-                            const specificXPath = '//*[@id="main-container"]/div/div[2]/div/div/div[1]/div[2]/form/div[4]/div[2]/div/input';
-                            input = getElementByXPath(specificXPath);
-                        }
-
-                        if (input) {
-                            fillInput(input, code);
-                            console.log("EduTOTP: Injected code via scripting fallback.");
-                            const btn = document.getElementById('submit-btn');
-                            if (btn) btn.click();
-                        }
+                        execute();
                     },
-                    args: [code, userNumber, password]
+                    args: [code, userNumber, password, delay]
                 });
             }
         }
